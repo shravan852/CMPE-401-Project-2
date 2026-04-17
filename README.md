@@ -8,10 +8,10 @@
 
 This project explores two fundamental deep learning approaches for time-series modeling using official Keras examples:
 
-| Task | Model | Dataset | Problem Type |
-|------|-------|---------|--------------|
-| Classification | Transformer | FordA | Binary fault detection |
-| Forecasting | LSTM | Jena Climate | Temperature prediction (12h ahead) |
+| Task | Model | Dataset | Problem Type | Result |
+|------|-------|---------|--------------|--------|
+| Classification | Transformer | FordA | Binary fault detection | **86.59% accuracy** |
+| Forecasting | LSTM | Jena Climate | Temperature prediction (12h ahead) | **Best Val MSE: 0.0949** |
 
 ---
 
@@ -19,12 +19,11 @@ This project explores two fundamental deep learning approaches for time-series m
 
 ```
 cmpe401-project2/
-├── lstm_forecasting_final.ipynb              # Task 1 — LSTM baseline reproduction
-├── lstm_forecasting_improvements.ipynb       # Task 2 — Three improvements
-├── README.md
+├── transformer.ipynb                         # Task 1A — Transformer classification (FordA)
+├── lstm_forecasting_final.ipynb              # Task 1B — LSTM baseline reproduction
+├── lstm_forecasting_improvements.ipynb       # Task 2 — Three LSTM improvements
+└── README.md
 ```
-
-> **Note on Transformer:** The official Keras Transformer notebook will be added once environment compatibility is resolved. See Task 1A below for full details and referenced results.
 
 ---
 
@@ -43,16 +42,16 @@ cmpe401-project2/
 - Global average pooling → Dense → Softmax
 - Total parameters: 29,258
 
-**Baseline Results:**
+**Results:**
 
 | Metric | Value |
 |--------|-------|
-| Test Accuracy | ~85% (official Keras result) |
-| Parameters | 29,258 |
+| Test Accuracy | **86.59%** |
+| Val Accuracy | ~85% |
 | Optimizer | Adam (lr=1e-4) |
-| Epochs | 150 (early stopping, patience=10) |
+| Epochs | 150 |
 
-> **Note on reproducibility:** The official Keras Transformer example could not be reproduced in the current Colab/Kaggle environment due to a breaking change in Keras 3 (TF 2.19, Keras 3.13). Specifically, `GlobalAveragePooling1D` with `data_format='channels_last'` now collapses the wrong axis, outputting shape `(None, 1)` instead of `(None, 500)`, causing the model to output random predictions (~51% accuracy) regardless of training. This was reproduced and confirmed across multiple platforms (Google Colab, Kaggle) and Keras versions. The official notebook result (~85% test accuracy) is referenced directly from the Keras documentation. The model architecture, training procedure, and expected results are fully documented above.
+> **Note on reproducibility:** The official Keras Transformer example contains a bug — `GlobalAveragePooling1D(data_format="channels_last")` collapses the wrong axis in Keras 3, outputting shape `(None, 1)` instead of `(None, 500)`, causing the model to produce random predictions (~51% accuracy). This is a confirmed upstream bug documented in keras-io [Issue #1908](https://github.com/keras-team/keras-io/issues/1908) and [Issue #20627](https://github.com/keras-team/keras/issues/20627). The fix is changing `data_format="channels_last"` to `data_format="channels_first"`, which correctly averages across the 500 timesteps and restores the expected model behavior and accuracy.
 
 ---
 
@@ -81,13 +80,11 @@ cmpe401-project2/
 
 **Best Val MSE: 0.0973 (Epoch 1)**
 
-**Observations:** Training MSE decreases steadily indicating active learning. Validation MSE increases after epoch 1 — a sign of mild overfitting. The small model (5,153 params) converges quickly, suggesting the task is learnable with minimal capacity but more epochs or larger model could improve generalization.
-
 ---
 
 ## Task 2 — Improvements (LSTM Forecasting)
 
-Three controlled modifications were applied to the LSTM baseline. All other settings held constant (epochs=10, optimizer=Adam, lr=0.001, batch=256).
+Three controlled modifications applied to the LSTM baseline. All other settings held constant (epochs=10, optimizer=Adam, lr=0.001).
 
 | # | Improvement | Change | Motivation |
 |---|-------------|--------|------------|
@@ -106,13 +103,11 @@ Three controlled modifications were applied to the LSTM baseline. All other sett
 
 ### Analysis
 
-- **Imp1 (Larger LSTM):** Marginally worse (0.0978 vs 0.0973). Larger model overfits faster — early stopping triggered at epoch 6 vs epoch 10 for baseline. With only 10 epochs, extra capacity doesn't have time to generalize.
+- **Imp1 (Larger LSTM):** Marginally worse. Larger model overfits faster — early stopping at epoch 6 vs 10 for baseline. Extra capacity doesn't have time to generalize with only 10 epochs.
+- **Imp2 (Stacked LSTM):** Worst result. Depth adds complexity without enough regularization, hurting generalization on structured weather data.
+- **Imp3 (Longer Sequence):** Best result — the only improvement that beat baseline. Confirms that **input representation matters more than model capacity** for weather forecasting. Multi-day patterns require more historical context.
 
-- **Imp2 (Stacked LSTM):** Worst result (0.1012). Two LSTM layers double the complexity, causing faster overfitting. The Jena Climate task is learnable with shallow models — depth requires more regularization or longer training.
-
-- **Imp3 (Longer Sequence):** Best result (0.0949) — the only improvement that beat the baseline. Confirms that **input representation matters more than model capacity** for structured weather forecasting. Multi-day temperature patterns require more historical context to predict accurately.
-
-**Key Insight:** For time-series forecasting on structured weather data, improving the input (more context) is more effective than improving the model (more parameters or layers).
+**Key Insight:** For structured time-series forecasting, improving the input (more context) is more effective than improving the model (more parameters or layers).
 
 ---
 
@@ -120,7 +115,7 @@ Three controlled modifications were applied to the LSTM baseline. All other sett
 
 ### LSTM Loss Curve Analysis (Baseline)
 - Training MSE decreases from 0.1184 → 0.0610 over 10 epochs — model is actively learning
-- Validation MSE is lowest at epoch 1 (0.0973) then increases — mild overfitting
+- Validation MSE lowest at epoch 1 (0.0973) then increases — mild overfitting
 - Small train-val gap suggests the model is near its capacity limit for this architecture
 
 ### Transformer vs LSTM — Key Differences
@@ -140,34 +135,39 @@ Three controlled modifications were applied to the LSTM baseline. All other sett
 
 **Q1: Which model did you find easier to understand and why?**
 
-The LSTM was significantly easier to understand. It processes sequences step-by-step, maintaining a hidden state that carries information forward in time — this directly mirrors how we intuitively think about sequential data. The gating mechanisms (input, forget, output gates) have a clear functional interpretation: the model learns what to remember and what to discard at each timestep.
+The LSTM was significantly easier to understand. It processes sequences step-by-step, maintaining a hidden state that carries information forward — this mirrors how we intuitively think about sequential data. The gating mechanisms (input, forget, output gates) have a clear functional interpretation.
 
-The Transformer operates on all timesteps simultaneously via self-attention, which is a more abstract concept. Additionally, during this project the Transformer proved far more sensitive to the software environment — a breaking change in Keras 3's `GlobalAveragePooling1D` caused the official example to fail entirely across multiple platforms, while the LSTM ran correctly on the first attempt with no modifications required.
+The Transformer operates on all timesteps simultaneously via self-attention, which is more abstract. It also proved more sensitive to the software environment — a bug in the official Keras example's `GlobalAveragePooling1D` layer (using wrong `data_format` argument) caused the model to silently fail across multiple platforms until the bug was identified and patched. The LSTM ran correctly on the first attempt.
 
 **Q2: What improvement did you try, and what did you learn from it?**
 
 Three improvements were run on the LSTM forecasting model with actual training results:
 
-1. **Larger hidden size (32→64):** Marginally worse (Val MSE 0.0978 vs 0.0973). More capacity caused faster overfitting — early stopping triggered at epoch 6 instead of 10. Learning: bigger isn't always better with small datasets and short training budgets.
+1. **Larger hidden size (32→64):** Marginally worse (Val MSE 0.0978 vs 0.0973). More capacity caused faster overfitting — early stopping at epoch 6 instead of 10. Learning: bigger isn't always better with short training budgets.
 
-2. **Stacked LSTM (1→2 layers):** Worst result (Val MSE 0.1012). Depth adds complexity without enough regularization, hurting generalization on structured weather data. Learning: deep LSTMs need dropout or more epochs to be beneficial.
+2. **Stacked LSTM (1→2 layers):** Worst result (Val MSE 0.1012). Depth adds complexity without enough regularization. Learning: deep LSTMs need dropout or more epochs to be beneficial.
 
-3. **Longer look-back window (5→10 days):** Best result (Val MSE 0.0949) — the only improvement that beat the baseline. Learning: for weather forecasting, input representation matters more than model architecture. Multi-day temperature patterns require more historical context to predict accurately.
+3. **Longer look-back window (5→10 days):** Best result (Val MSE 0.0949) — the only improvement that beat baseline. Learning: for weather forecasting, input representation matters more than model architecture.
 
-**Overall learning:** For time-series forecasting on structured data, improving the input (more context) is more effective than improving the model (more parameters or layers).
+**Overall learning:** For structured time-series forecasting, improving the input (more temporal context) is more effective than improving the model (more parameters or layers).
 
 ---
 
 ## How to Run
 
-1. Open `lstm_forecasting_final.ipynb` in Google Colab for baseline
-2. Open `lstm_forecasting_improvements.ipynb` for the 3 improvements
-3. Runtime → Change runtime type → GPU (T4 or better)
-4. Run All cells
+1. Open `transformer.ipynb` in Google Colab for Transformer classification
+2. Open `lstm_forecasting_final.ipynb` for LSTM baseline
+3. Open `lstm_forecasting_improvements.ipynb` for the 3 improvements
+4. Runtime → Change runtime type → GPU (T4 or better)
+5. Run All cells
 
 **Official Keras References:**
 - [Transformer Classification Example](https://keras.io/examples/timeseries/timeseries_classification_transformer/)
 - [LSTM Forecasting Example](https://keras.io/examples/timeseries/timeseries_weather_forecasting/)
+
+**Bug Fix Reference:**
+- [keras-io Issue #1908](https://github.com/keras-team/keras-io/issues/1908)
+- [keras Issue #20627](https://github.com/keras-team/keras/issues/20627)
 
 ---
 
