@@ -99,7 +99,7 @@ Three controlled modifications applied to the LSTM baseline. All other settings 
 | Baseline (hidden=32, 1 layer, 5 days) | 0.0973 | 10 | — |
 | Imp1 — Larger LSTM (hidden=64) | 0.0978 | 6 | +0.0005 ↑ worse |
 | Imp2 — Stacked LSTM (2 layers) | 0.1012 | 6 | +0.0039 ↑ worse |
-| **Imp3 — Longer Sequence (10 days)** | **0.0949** | 8 | **-0.0024 ↓ better  |
+| **Imp3 — Longer Sequence (10 days)** | **0.0949** | 8 | -0.0024 ↓ better  |
 
 ### Analysis
 
